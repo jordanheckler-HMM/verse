@@ -5,7 +5,8 @@
 
 export const OLLAMA_CONFIG = {
   // Base URL for Ollama API
-  baseUrl: 'http://localhost:11434',
+  // Use IPv4 loopback by default because packaged sidecar builds can fail to resolve localhost reliably.
+  baseUrl: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
   
   // Model name as specified in requirements
   model: 'lyra-general',
@@ -37,4 +38,3 @@ export const OLLAMA_CONFIG = {
 export function getOllamaUrl(endpoint: keyof typeof OLLAMA_CONFIG.endpoints): string {
   return `${OLLAMA_CONFIG.baseUrl}${OLLAMA_CONFIG.endpoints[endpoint]}`;
 }
-

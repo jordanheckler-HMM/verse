@@ -15,6 +15,11 @@ import {
   ProjectListItem
 } from '../types/song';
 
+type LyraStreamEvent =
+  | { type: 'chunk'; content: string }
+  | { type: 'done'; response: LyraResponse }
+  | { type: 'error'; error: string; hint?: string; status?: number };
+
 // Backend configuration
 const BACKEND_URL = 'http://localhost:3001';
 
@@ -255,6 +260,115 @@ export class VerseApiClient {
     }
 
     return response.json();
+  }
+
+  /**
+   * Sends a message to Lyra and streams response chunks
+   * @param sessionId - Session identifier
+   * @param message - User's message/request
+   * @param onChunk - Callback invoked for each streamed text chunk
+   * @returns Final Lyra response
+   */
+  async sendLyraMessageStream(
+    sessionId: string,
+    message: string,
+    onChunk: (chunk: string) => void,
+    options?: { signal?: AbortSignal }
+  ): Promise<LyraResponse> {
+    const response = await fetch(`${this.baseUrl}/api/lyra/message/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, message }),
+      signal: options?.signal,
+    });
+
+    if (!response.ok) {
+      let errorMessage = `Failed to send message to Lyra (${response.status})`;
+      try {
+        const error = await response.json();
+        if (error?.error) {
+          errorMessage = error.error;
+        }
+      } catch {
+        // Ignore JSON parsing errors and keep fallback message.
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    if (!response.body) {
+      throw new Error('Streaming is not supported in this environment');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let finalResponse: LyraResponse | null = null;
+
+    const processEventPayload = (payload: string): void => {
+      if (!payload.trim()) {
+        return;
+      }
+
+      const event = JSON.parse(payload) as LyraStreamEvent;
+
+      if (event.type === 'chunk') {
+        onChunk(event.content);
+        return;
+      }
+
+      if (event.type === 'done') {
+        finalResponse = event.response;
+        return;
+      }
+
+      throw new Error(event.hint ? `${event.error}\n${event.hint}` : event.error);
+    };
+
+    const processEventBlock = (rawBlock: string): void => {
+      const dataLines = rawBlock
+        .split('\n')
+        .filter((line) => line.startsWith('data:'))
+        .map((line) => line.slice(5).trim());
+
+      if (dataLines.length === 0) {
+        return;
+      }
+
+      processEventPayload(dataLines.join('\n'));
+    };
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+
+      let separatorIndex = buffer.indexOf('\n\n');
+      while (separatorIndex !== -1) {
+        const rawBlock = buffer.slice(0, separatorIndex).trim();
+        buffer = buffer.slice(separatorIndex + 2);
+
+        if (rawBlock) {
+          processEventBlock(rawBlock);
+        }
+
+        separatorIndex = buffer.indexOf('\n\n');
+      }
+    }
+
+    const remaining = buffer.trim();
+    if (remaining) {
+      processEventBlock(remaining);
+    }
+
+    if (!finalResponse) {
+      throw new Error('Stream ended before receiving a final response');
+    }
+
+    return finalResponse;
   }
 
   /**

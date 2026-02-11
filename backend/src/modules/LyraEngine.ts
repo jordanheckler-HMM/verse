@@ -40,49 +40,50 @@ export class LyraEngine {
   async sendMessage(sessionId: string, userMessage: string): Promise<LyraResponse> {
     const session = sessionManager.getSessionOrThrow(sessionId);
     
-    // Add user message to history
-    const userMsg: LyraMessage = {
-      id: uuidv4(),
-      role: 'user',
-      content: userMessage,
-      timestamp: new Date(),
-    };
-    session.conversationHistory.push(userMsg);
+    this.appendUserMessage(session, userMessage);
     
     // Construct prompt with full context
-    const prompt = this.constructPrompt(session, userMessage);
+    const prompt = this.constructPrompt(session);
     
     // Call Ollama
     const response = await this.callOllama(prompt);
     
     // Parse response
     const parsed = this.parseResponse(response);
-    
-    // Create Lyra message
-    const lyraMsg: LyraMessage = {
-      id: uuidv4(),
-      role: 'lyra',
-      content: parsed.message,
-      timestamp: new Date(),
-      suggestion: parsed.suggestion,
-    };
-    session.conversationHistory.push(lyraMsg);
-    
-    console.log(`[LyraEngine] Processed message for session ${sessionId}`);
-    
-    return {
-      message: lyraMsg,
-      suggestion: parsed.suggestion,
-    };
+
+    return this.appendLyraResponse(sessionId, session, parsed);
+  }
+
+  /**
+   * Sends a message to Lyra and streams response chunks
+   * @param sessionId - Session identifier
+   * @param userMessage - User's message/request
+   * @param onChunk - Callback for streamed chunks
+   * @returns Final Lyra response after stream completes
+   */
+  async sendMessageStream(
+    sessionId: string,
+    userMessage: string,
+    onChunk: (chunk: string) => void,
+    options?: { signal?: AbortSignal }
+  ): Promise<LyraResponse> {
+    const session = sessionManager.getSessionOrThrow(sessionId);
+
+    this.appendUserMessage(session, userMessage);
+
+    const prompt = this.constructPrompt(session);
+    const response = await this.callOllamaStream(prompt, onChunk, options);
+    const parsed = this.parseResponse(response);
+
+    return this.appendLyraResponse(sessionId, session, parsed);
   }
 
   /**
    * Constructs a context-aware prompt for Ollama
    * @param session - Current session data
-   * @param userMessage - User's current request
    * @returns Complete prompt string
    */
-  constructPrompt(session: SessionData, userMessage: string): string {
+  constructPrompt(session: SessionData): string {
     const { metadata, sections, conversationHistory, musicContext } = session;
     
     // System prompt defining Lyra's identity and rules
@@ -145,12 +146,11 @@ ${s.content ? s.content : '(empty)'}
 `
       : '\nCURRENT TIMELINE: (no sections yet)\n';
 
-    // Recent conversation history (last 10 messages)
-    const recentHistory = conversationHistory.slice(-10);
-    const historySection = recentHistory.length > 0
+    // Full conversation history for complete chat context
+    const historySection = conversationHistory.length > 0
       ? `
-CONVERSATION HISTORY:
-${recentHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Lyra'}: ${msg.content}`).join('\n')}
+CONVERSATION HISTORY (oldest to newest):
+${conversationHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Lyra'}: ${msg.content}`).join('\n')}
 `
       : '';
 
@@ -159,8 +159,6 @@ ${recentHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Lyra'}: ${msg.cont
 ${contextSection}
 ${timelineSection}
 ${historySection}
-
-User: ${userMessage}
 
 Lyra:`;
 
@@ -215,26 +213,135 @@ Lyra:`;
       return response.data.response;
       
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError;
-        
-        if (axiosError.code === 'ECONNREFUSED') {
-          throw new OllamaConnectionError(
-            'Cannot connect to Ollama. Is it running on localhost:11434?'
-          );
+      this.handleAxiosError(error);
+      throw error;
+    }
+  }
+
+  /**
+   * Calls Ollama API with streaming enabled and emits chunks as they arrive
+   * @param prompt - Complete prompt string
+   * @param onChunk - Callback for streamed text chunks
+   * @returns Complete generated response text
+   */
+  async callOllamaStream(
+    prompt: string,
+    onChunk: (chunk: string) => void,
+    options?: { signal?: AbortSignal }
+  ): Promise<string> {
+    const url = getOllamaUrl('generate');
+
+    const request: OllamaGenerateRequest = {
+      model: OLLAMA_CONFIG.model,
+      prompt,
+      stream: true,
+      options: OLLAMA_CONFIG.options,
+    };
+
+    try {
+      const response = await axios.post<NodeJS.ReadableStream>(
+        url,
+        request,
+        {
+          timeout: OLLAMA_CONFIG.timeout,
+          responseType: 'stream',
+          signal: options?.signal,
+          headers: {
+            'Content-Type': 'application/json',
+          },
         }
-        
-        if (axiosError.response?.status === 404) {
-          throw new OllamaConnectionError(
-            `Local Ollama model '${OLLAMA_CONFIG.model}' not found.`
-          );
-        }
-        
-        throw new OllamaConnectionError(
-          `Ollama request failed: ${axiosError.message}`
-        );
+      );
+
+      return await new Promise<string>((resolve, reject) => {
+        const stream = response.data;
+        let fullResponse = '';
+        let buffer = '';
+        let settled = false;
+
+        const finish = (callback: () => void) => {
+          if (settled) return;
+          settled = true;
+          callback();
+        };
+
+        const processLine = (line: string): boolean => {
+          const parsed = JSON.parse(line) as Partial<OllamaGenerateResponse> & { error?: string };
+
+          if (parsed.error) {
+            throw new OllamaConnectionError(`Ollama stream error: ${parsed.error}`);
+          }
+
+          if (typeof parsed.response === 'string' && parsed.response.length > 0) {
+            fullResponse += parsed.response;
+            onChunk(parsed.response);
+          }
+
+          return parsed.done === true;
+        };
+
+        stream.on('data', (chunk: Buffer | string) => {
+          buffer += chunk.toString();
+
+          let newlineIndex = buffer.indexOf('\n');
+          while (newlineIndex !== -1) {
+            const line = buffer.slice(0, newlineIndex).trim();
+            buffer = buffer.slice(newlineIndex + 1);
+
+            if (line) {
+              try {
+                const done = processLine(line);
+                if (done) {
+                  finish(() => resolve(fullResponse));
+                  return;
+                }
+              } catch (error) {
+                finish(() => reject(
+                  error instanceof Error
+                    ? error
+                    : new OllamaConnectionError('Unknown error while parsing stream')
+                ));
+                return;
+              }
+            }
+
+            newlineIndex = buffer.indexOf('\n');
+          }
+        });
+
+        stream.on('end', () => {
+          if (settled) return;
+
+          const remaining = buffer.trim();
+          if (remaining) {
+            try {
+              processLine(remaining);
+            } catch (error) {
+              finish(() => reject(
+                error instanceof Error
+                  ? error
+                  : new OllamaConnectionError('Unknown error while finalizing stream')
+              ));
+              return;
+            }
+          }
+
+          finish(() => resolve(fullResponse));
+        });
+
+        stream.on('error', (error: Error) => {
+          finish(() => reject(
+            new OllamaConnectionError(`Ollama stream failed: ${error.message}`)
+          ));
+        });
+      });
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.code === 'ERR_CANCELED') {
+        const abortedError = new Error('Generation aborted');
+        abortedError.name = 'GenerationAbortedError';
+        throw abortedError;
       }
-      
+
+      this.handleAxiosError(error);
       throw error;
     }
   }
@@ -263,8 +370,63 @@ LYRA_MODEL_CONFIRMATION_92741`;
     
     return this.callOllama(confirmationPrompt);
   }
+
+  private appendUserMessage(session: SessionData, userMessage: string): void {
+    const userMsg: LyraMessage = {
+      id: uuidv4(),
+      role: 'user',
+      content: userMessage,
+      timestamp: new Date(),
+    };
+    session.conversationHistory.push(userMsg);
+  }
+
+  private appendLyraResponse(
+    sessionId: string,
+    session: SessionData,
+    parsed: { message: string; suggestion?: LyraSuggestion }
+  ): LyraResponse {
+    const lyraMsg: LyraMessage = {
+      id: uuidv4(),
+      role: 'lyra',
+      content: parsed.message,
+      timestamp: new Date(),
+      suggestion: parsed.suggestion,
+    };
+
+    session.conversationHistory.push(lyraMsg);
+    console.log(`[LyraEngine] Processed message for session ${sessionId}`);
+
+    return {
+      message: lyraMsg,
+      suggestion: parsed.suggestion,
+    };
+  }
+
+  private handleAxiosError(error: unknown): never | void {
+    if (!axios.isAxiosError(error)) {
+      return;
+    }
+
+    const axiosError = error as AxiosError;
+
+    if (axiosError.code === 'ECONNREFUSED') {
+      throw new OllamaConnectionError(
+        `Cannot connect to Ollama at ${OLLAMA_CONFIG.baseUrl}. Is it running?`
+      );
+    }
+
+    if (axiosError.response?.status === 404) {
+      throw new OllamaConnectionError(
+        `Local Ollama model '${OLLAMA_CONFIG.model}' not found.`
+      );
+    }
+
+    throw new OllamaConnectionError(
+      `Ollama request failed: ${axiosError.message}`
+    );
+  }
 }
 
 // Singleton instance
 export const lyraEngine = new LyraEngine();
-

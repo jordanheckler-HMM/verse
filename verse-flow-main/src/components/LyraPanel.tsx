@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Send, Sparkles } from 'lucide-react';
+import { ChevronRight, Send, Sparkles, Trash2, Square } from 'lucide-react';
 import { LyraMessage, Section } from '@/types/song';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -12,6 +12,8 @@ interface LyraPanelProps {
   sections: Section[];
   isThinking: boolean;
   onCollapse?: () => void;
+  onClearHistory?: () => void;
+  onStopGeneration?: () => void;
 }
 
 export function LyraPanel({
@@ -20,6 +22,8 @@ export function LyraPanel({
   sections,
   isThinking,
   onCollapse,
+  onClearHistory,
+  onStopGeneration,
 }: LyraPanelProps) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -30,7 +34,7 @@ export function LyraPanel({
   }, [messages]);
 
   const handleSend = () => {
-    if (!input.trim()) return;
+    if (!input.trim() || isThinking) return;
     onSendMessage(input.trim());
     setInput('');
   };
@@ -53,17 +57,43 @@ export function LyraPanel({
           <h2 className="text-xs font-semibold tracking-wide">Lyra</h2>
           <p className="text-[11px] text-muted-foreground">Brainstorming partner</p>
         </div>
-        {onCollapse && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="ml-auto h-6 w-6"
-            onClick={onCollapse}
-            title="Collapse Lyra panel"
-          >
-            <ChevronRight className="w-3.5 h-3.5" />
-          </Button>
-        )}
+        <div className="ml-auto flex items-center gap-1">
+          {onStopGeneration && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onStopGeneration}
+              title="Stop generation"
+              disabled={!isThinking}
+            >
+              <Square className="w-3.5 h-3.5" />
+            </Button>
+          )}
+          {onClearHistory && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onClearHistory}
+              title="Clear chat history"
+              disabled={isThinking || messages.length === 0}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )}
+          {onCollapse && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onCollapse}
+              title="Collapse Lyra panel"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Messages */}
@@ -173,7 +203,7 @@ export function LyraPanel({
             variant="ghost"
             className="absolute right-1.5 bottom-1.5 h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-secondary"
             onClick={handleSend}
-            disabled={!input.trim()}
+            disabled={!input.trim() || isThinking}
           >
             <Send className="w-3.5 h-3.5" />
           </Button>

@@ -53,6 +53,98 @@ lyraRouter.post('/message', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/lyra/message/stream
+ * Sends a message to Lyra and streams chunked response content
+ */
+lyraRouter.post('/message/stream', async (req: Request, res: Response) => {
+  const { sessionId, message } = req.body as SendLyraMessageRequest;
+
+  if (!sessionId || !message) {
+    res.status(400).json({
+      error: 'Missing required fields: sessionId, message',
+    });
+    return;
+  }
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const generationAbortController = new AbortController();
+  const abortGeneration = () => {
+    if (!generationAbortController.signal.aborted) {
+      generationAbortController.abort();
+    }
+  };
+
+  let clientDisconnected = false;
+  req.on('aborted', () => {
+    clientDisconnected = true;
+    abortGeneration();
+  });
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      clientDisconnected = true;
+      abortGeneration();
+    }
+  });
+  res.on('error', () => {
+    clientDisconnected = true;
+    abortGeneration();
+  });
+
+  const writeEvent = (payload: unknown) => {
+    if (clientDisconnected || res.writableEnded) {
+      return;
+    }
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  try {
+    const response = await lyraEngine.sendMessageStream(
+      sessionId,
+      message,
+      (chunk) => {
+        writeEvent({ type: 'chunk', content: chunk });
+      },
+      { signal: generationAbortController.signal }
+    );
+
+    writeEvent({ type: 'done', response });
+    if (!clientDisconnected && !res.writableEnded) {
+      res.end();
+    }
+  } catch (error: any) {
+    if (error.name === 'GenerationAbortedError') {
+      if (!clientDisconnected && !res.writableEnded) {
+        res.end();
+      }
+      return;
+    }
+
+    if (error.name === 'SessionNotFoundError') {
+      writeEvent({ type: 'error', error: error.message, status: 404 });
+    } else if (error.name === 'OllamaConnectionError') {
+      writeEvent({
+        type: 'error',
+        error: error.message,
+        hint: 'Make sure Ollama is running with the lyra-general model',
+        status: 503,
+      });
+    } else {
+      console.error('[LyraRouter] Error processing streamed message:', error);
+      writeEvent({ type: 'error', error: 'Failed to process message', status: 500 });
+    }
+
+    if (!clientDisconnected && !res.writableEnded) {
+      res.end();
+    }
+  }
+});
+
+/**
  * GET /api/lyra/health
  * Checks Ollama connection status
  */
@@ -73,7 +165,7 @@ lyraRouter.get('/health', async (_req: Request, res: Response) => {
       status: 'ready',
       message: 'Lyra is ready',
       model: 'lyra-general',
-      streaming: false
+      streaming: true
     });
   } catch (error) {
     console.error('[LyraRouter] Error checking health:', error);
@@ -177,4 +269,3 @@ lyraRouter.post('/debug/confirm', async (_req: Request, res: Response) => {
     });
   }
 });
-

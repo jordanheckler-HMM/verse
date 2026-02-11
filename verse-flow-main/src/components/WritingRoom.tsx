@@ -39,6 +39,7 @@ export function WritingRoom({ project, onProjectUpdate, onSwitchProject }: Writi
     referenceText: project.metadata.referenceText,
   });
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const streamAbortControllerRef = useRef<AbortController | null>(null);
 
   // Save project helper
   const saveProject = async () => {
@@ -114,19 +115,19 @@ export function WritingRoom({ project, onProjectUpdate, onSwitchProject }: Writi
   useEffect(() => {
     const initBackendSession = async () => {
       try {
-        const sessionId = await apiClient.startSession({
+        const sessionMetadata = {
           genre: project.metadata.genre || '',
           mood: project.metadata.mood || '',
           styleReference: project.metadata.referenceText,
+        };
+
+        const sessionId = await apiClient.startSession({
+          ...sessionMetadata,
         });
         setBackendSessionId(sessionId);
         
         // Reset Lyra memory for this project
-        await apiClient.resetLyraSession(sessionId, {
-          genre: project.metadata.genre || '',
-          mood: project.metadata.mood || '',
-          styleReference: project.metadata.referenceText,
-        });
+        await apiClient.resetLyraSession(sessionId, sessionMetadata);
         
         console.log('[WritingRoom] Backend session started and reset for project:', project.id);
       } catch (error) {
@@ -144,82 +145,177 @@ export function WritingRoom({ project, onProjectUpdate, onSwitchProject }: Writi
     };
   }, [project.id]);
 
-  const handleAskLyra = async (sectionId: string, content: string) => {
-    const section = sections.find(s => s.id === sectionId);
-    if (!section || !backendSessionId) {
-      console.error('[WritingRoom] Cannot ask Lyra: missing section or backend session');
-      return;
-    }
-
-    const userMessage: LyraMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: `Help me with ${section.label}:\n\n"${content || '(empty)'}"`,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setIsThinking(true);
-
-    try {
-      // Call backend API which uses your local lyra-general model
-      const response = await apiClient.sendLyraMessage(
-        backendSessionId, 
-        `Please help me improve this ${section.label}. Current lyrics:\n\n${content || '(empty)'}\n\nSuggest an improved version using the [SUGGESTION for ${section.label}] format.`
-      );
-      
-      setMessages(prev => [...prev, response.message]);
-      console.log('[WritingRoom] Lyra response received');
-    } catch (error) {
-      console.error('[WritingRoom] Failed to ask Lyra:', error);
-      
-      const errorMessage: LyraMessage = {
-        id: `lyra-error-${Date.now()}`,
-        role: 'lyra',
-        content: 'Sorry, I encountered an error connecting to Lyra. Make sure the backend is running on port 3001.',
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsThinking(false);
-    }
+  const syncLyraContext = async (sessionId: string) => {
+    await Promise.all([
+      apiClient.syncSections(sessionId, sections),
+      apiClient.updateMusicContext(sessionId, musicContext),
+      apiClient.updateSessionMetadata(sessionId, {
+        genre: metadata.genre || '',
+        mood: metadata.mood || '',
+        styleReference: metadata.referenceText,
+      }),
+    ]);
   };
 
-  const handleSendMessage = async (content: string) => {
+  const sendMessageToLyra = async (
+    userContent: string,
+    backendPrompt: string,
+    fallbackError: string
+  ) => {
     if (!backendSessionId) {
       console.error('[WritingRoom] No backend session ID');
       return;
     }
 
+    if (streamAbortControllerRef.current) {
+      console.warn('[WritingRoom] Lyra generation already in progress');
+      return;
+    }
+
+    const streamAbortController = new AbortController();
+    streamAbortControllerRef.current = streamAbortController;
+
     const userMessage: LyraMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content,
+      content: userContent,
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    const streamingMessageId = `lyra-stream-${Date.now()}`;
+    const streamingMessage: LyraMessage = {
+      id: streamingMessageId,
+      role: 'lyra',
+      content: '',
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage, streamingMessage]);
     setIsThinking(true);
 
     try {
-      // Call backend API which uses your local lyra-general model
-      const response = await apiClient.sendLyraMessage(backendSessionId, content);
-      
-      setMessages(prev => [...prev, response.message]);
-      console.log('[WritingRoom] Lyra response received');
+      await syncLyraContext(backendSessionId);
+
+      const response = await apiClient.sendLyraMessageStream(
+        backendSessionId,
+        backendPrompt,
+        (chunk) => {
+          setMessages((prev) => {
+            const index = prev.findIndex((msg) => msg.id === streamingMessageId);
+            if (index === -1) {
+              return [...prev, { ...streamingMessage, content: chunk }];
+            }
+
+            const next = [...prev];
+            next[index] = {
+              ...next[index],
+              content: `${next[index].content}${chunk}`,
+            };
+            return next;
+          });
+        },
+        { signal: streamAbortController.signal }
+      );
+
+      setMessages((prev) => {
+        const index = prev.findIndex((msg) => msg.id === streamingMessageId);
+        if (index === -1) {
+          return [...prev, response.message];
+        }
+
+        const next = [...prev];
+        next[index] = response.message;
+        return next;
+      });
+
+      console.log('[WritingRoom] Lyra streamed response received');
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        setMessages((prev) => {
+          const index = prev.findIndex((msg) => msg.id === streamingMessageId);
+          if (index === -1) {
+            return prev;
+          }
+
+          if (!prev[index].content.trim()) {
+            return prev.filter((msg) => msg.id !== streamingMessageId);
+          }
+
+          return prev;
+        });
+
+        console.log('[WritingRoom] Lyra generation stopped');
+        return;
+      }
+
       console.error('[WritingRoom] Failed to send message to Lyra:', error);
-      
+
       const errorMessage: LyraMessage = {
         id: `lyra-error-${Date.now()}`,
         role: 'lyra',
-        content: 'Sorry, I encountered an error connecting to Lyra. Make sure the backend is running on port 3001 and Ollama is active.',
+        content: fallbackError,
         timestamp: new Date(),
       };
-      setMessages(prev => [...prev, errorMessage]);
+
+      setMessages((prev) => [
+        ...prev.filter((msg) => msg.id !== streamingMessageId),
+        errorMessage,
+      ]);
     } finally {
+      if (streamAbortControllerRef.current === streamAbortController) {
+        streamAbortControllerRef.current = null;
+      }
       setIsThinking(false);
     }
+  };
+
+  const handleAskLyra = async (sectionId: string, content: string) => {
+    const section = sections.find(s => s.id === sectionId);
+    if (!section) {
+      console.error('[WritingRoom] Cannot ask Lyra: missing section');
+      return;
+    }
+
+    await sendMessageToLyra(
+      `Help me with ${section.label}:\n\n"${content || '(empty)'}"`,
+      `Please help me improve this ${section.label}. Current lyrics:\n\n${content || '(empty)'}\n\nSuggest an improved version using the [SUGGESTION for ${section.label}] format.`,
+      'Sorry, I encountered an error talking to Lyra. Make sure the backend is running on port 3001 and Ollama is active.'
+    );
+  };
+
+  const handleSendMessage = async (content: string) => {
+    await sendMessageToLyra(
+      content,
+      content,
+      'Sorry, I encountered an error talking to Lyra. Make sure the backend is running on port 3001 and Ollama is active.'
+    );
+  };
+
+  const handleClearLyraHistory = async () => {
+    if (!backendSessionId) {
+      console.error('[WritingRoom] Cannot clear Lyra history: no backend session ID');
+      return;
+    }
+
+    try {
+      await apiClient.resetLyraSession(backendSessionId, {
+        genre: metadata.genre || '',
+        mood: metadata.mood || '',
+        styleReference: metadata.referenceText,
+      });
+      setMessages([]);
+      console.log('[WritingRoom] Cleared Lyra chat history');
+    } catch (error) {
+      console.error('[WritingRoom] Failed to clear Lyra chat history:', error);
+    }
+  };
+
+  const handleStopLyraGeneration = () => {
+    if (!streamAbortControllerRef.current) {
+      return;
+    }
+
+    streamAbortControllerRef.current.abort();
   };
 
   const handleTitleBlur = () => {
@@ -370,6 +466,8 @@ export function WritingRoom({ project, onProjectUpdate, onSwitchProject }: Writi
                 onSendMessage={handleSendMessage}
                 sections={sections}
                 isThinking={isThinking}
+                onClearHistory={handleClearLyraHistory}
+                onStopGeneration={handleStopLyraGeneration}
                 onCollapse={() => setIsLyraCollapsed(true)}
               />
             </ResizablePanel>
