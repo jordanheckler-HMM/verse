@@ -89,6 +89,37 @@ Frontend running at: `http://localhost:5173`
 
 ---
 
+## 🖥️ Desktop Build (Tauri)
+
+Use this when you want to run Verse as a macOS desktop app (`verse.app`).
+
+### Additional Prerequisites
+
+1. **Rust toolchain** (Cargo + rustc)
+2. **Ollama running locally** at `http://localhost:11434`
+
+### Desktop Development
+
+```bash
+cd verse-flow-main
+npm run tauri:dev
+```
+
+`tauri:dev` builds and bundles the backend sidecar automatically, then starts the app.
+
+### Desktop Production Build
+
+```bash
+cd verse-flow-main
+npm run tauri:build
+```
+
+Build output:
+
+`verse-flow-main/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/verse.app`
+
+---
+
 ## ✅ Verify Everything Works
 
 1. **Check Backend Health:**
@@ -359,4 +390,3 @@ For questions, check:
 - Backend docs: `backend/README.md`
 - API client: `verse-flow-main/src/lib/api-client.ts`
 - Type definitions: `backend/src/types/index.ts`
-

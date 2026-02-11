@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
+    "build:sidecar:macos-arm64": "npm run build && mkdir -p dist/sidecar ../verse-flow-main/src-tauri/binaries && esbuild dist/server.js --bundle --platform=node --format=cjs --target=node18 --outfile=dist/sidecar/server.bundle.cjs && pkg dist/sidecar/server.bundle.cjs --target node18-macos-arm64 --output ../verse-flow-main/src-tauri/binaries/verse-backend-aarch64-apple-darwin",
     "start": "node dist/server.js",
     "type-check": "tsc --noEmit",
     "test": "npm run build && npm run test:unit && npm run test:integration",
@@ -26,6 +27,8 @@
     "@types/cors": "^2.8.17",
     "@types/uuid": "^9.0.7",
     "@types/node": "^20.10.4",
+    "esbuild": "^0.27.3",
+    "pkg": "^5.8.1",
     "typescript": "^5.3.3",
     "ts-node-dev": "^2.0.0"
   }

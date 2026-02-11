@@ -8,7 +8,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { Project, ProjectListItem, ProjectNotFoundError, SessionMetadata } from '../types';
 
-const PROJECTS_DIR = path.join(__dirname, '../../projects');
+const PROJECTS_DIR = process.env.VERSE_PROJECTS_DIR || path.join(__dirname, '../../projects');
 
 /**
  * In-memory tracking of the currently active project
@@ -182,4 +182,3 @@ export function setActiveProjectId(projectId: string | null): void {
   activeProjectId = projectId;
   console.log(`[ProjectStorage] Active project set to: ${projectId || 'none'}`);
 }
-
