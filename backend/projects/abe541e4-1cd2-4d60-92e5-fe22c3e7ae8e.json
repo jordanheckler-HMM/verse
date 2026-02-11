@@ -1,0 +1,49 @@
+{
+  "id": "abe541e4-1cd2-4d60-92e5-fe22c3e7ae8e",
+  "title": "Lies",
+  "createdAt": "2025-12-16T05:22:26.970Z",
+  "updatedAt": "2025-12-20T20:15:55.492Z",
+  "timeline": {
+    "sections": [
+      {
+        "id": "verse-1766261671969",
+        "type": "verse",
+        "label": "Verse",
+        "content": "",
+        "isCollapsed": false,
+        "chordProgressionId": "6254baab-6e52-44f5-a166-2e8e8185ae47"
+      },
+      {
+        "id": "chorus-1766260804684",
+        "type": "chorus",
+        "label": "Chorus",
+        "content": "Tell me lies, if you want to\nHide behind all the pain that you've been through\nI'll be here to listen, though I don't believe\nAll these lies you said to me",
+        "isCollapsed": false,
+        "chordProgressionId": "6254baab-6e52-44f5-a166-2e8e8185ae47"
+      }
+    ]
+  },
+  "scratchpad": "",
+  "metadata": {
+    "genre": "Pop/rock",
+    "mood": "Sympathetic",
+    "referenceText": "Think Ed Sheeran meets Blink-182"
+  },
+  "uiState": {},
+  "musicContext": {
+    "chordProgressions": [
+      {
+        "id": "6254baab-6e52-44f5-a166-2e8e8185ae47",
+        "name": "Main",
+        "chords": [
+          "Am",
+          "F",
+          "C",
+          "G"
+        ]
+      }
+    ],
+    "bpm": 135,
+    "key": "C"
+  }
+}

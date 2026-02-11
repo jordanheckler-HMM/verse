@@ -1,0 +1,39 @@
+{
+  "id": "a997b867-8454-49c5-87d6-653a08f0cd2a",
+  "title": "Good Time",
+  "createdAt": "2025-12-30T00:27:42.979Z",
+  "updatedAt": "2025-12-30T00:29:33.766Z",
+  "timeline": {
+    "sections": [
+      {
+        "id": "chorus-1767054466907",
+        "type": "chorus",
+        "label": "Chorus",
+        "content": "I hope your thinkin' bout me, cause I'm thinkin' bout you\nI hope you really want me, cause I really want you\nAll day (All day)\nAll night (All night)\nEvery time I close my eyes I see you\nYeah, when I close my eye I be havin' me a good time\nGood time",
+        "isCollapsed": false,
+        "chordProgressionId": "ff48d558-1033-4231-ab4e-569cd99d0607"
+      }
+    ]
+  },
+  "scratchpad": "",
+  "metadata": {
+    "genre": "Acoustic Rap/punk",
+    "mood": "Upbeat",
+    "referenceText": "Think Ed Sheeran meets Blink-182"
+  },
+  "uiState": {},
+  "musicContext": {
+    "chordProgressions": [
+      {
+        "id": "ff48d558-1033-4231-ab4e-569cd99d0607",
+        "name": "Main",
+        "chords": [
+          "C#",
+          "Am",
+          "D",
+          "F"
+        ]
+      }
+    ]
+  }
+}

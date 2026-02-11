@@ -1,0 +1,124 @@
+{
+  "id": "160f803a-3b84-46a2-ae3a-bbe6d2535cbe",
+  "title": "Alone",
+  "createdAt": "2025-12-15T16:56:43.450Z",
+  "updatedAt": "2026-01-02T13:55:26.994Z",
+  "timeline": {
+    "sections": [
+      {
+        "id": "verse-1765830966539",
+        "type": "verse",
+        "label": "Verse",
+        "content": "I know that time heals pain,  \nBut the weight of the past still lingers in my veins.  \n",
+        "isCollapsed": false,
+        "chordProgressionId": "ae94b3c3-3780-4301-a0fc-896dbeeca09b",
+        "status": "draft"
+      },
+      {
+        "id": "prechorus-1765833281390",
+        "type": "prechorus",
+        "label": "Pre-Chorus",
+        "content": "Every scar a lesson, every wound a song,  \nThe echoes of my story still play on.\nThe rhythm of my struggle is a story\nThe melody sounds holy",
+        "isCollapsed": false,
+        "chordProgressionId": "ae94b3c3-3780-4301-a0fc-896dbeeca09b",
+        "status": "draft"
+      },
+      {
+        "id": "chorus-1765830896589",
+        "type": "chorus",
+        "label": "Chorus",
+        "content": "I'm all alone, and I'm thinkin' maybe there's be a reason\nTime moves slow, yeah I'm leavin' cause no one believes in me",
+        "isCollapsed": false,
+        "chordProgressionId": "dc4ed07b-e967-4aad-ab30-9549ec61afdf",
+        "status": "draft"
+      },
+      {
+        "id": "verse-1765832877873",
+        "type": "verse",
+        "label": "Verse 2",
+        "content": "I hope that someday the mirror shows me I will be ok",
+        "isCollapsed": false,
+        "chordProgressionId": "ae94b3c3-3780-4301-a0fc-896dbeeca09b",
+        "status": "draft"
+      },
+      {
+        "id": "prechorus-1765833317406",
+        "type": "prechorus",
+        "label": "Pre-Chorus 2",
+        "content": "Every scar a lesson, every wound a song,  \nThe echoes of my story still play on.\nThe rhythm of my struggle is a story\nThe melody sounds holy",
+        "isCollapsed": false,
+        "chordProgressionId": "ae94b3c3-3780-4301-a0fc-896dbeeca09b",
+        "status": "draft"
+      },
+      {
+        "id": "chorus-1765834274961",
+        "type": "chorus",
+        "label": "Chorus 2",
+        "content": "I'm all alone, and I'm thinkin' maybe there's be a reason\nTime moves slow, yeah I'm leavin' cause no one believes in me",
+        "isCollapsed": false,
+        "chordProgressionId": "dc4ed07b-e967-4aad-ab30-9549ec61afdf",
+        "status": "draft"
+      },
+      {
+        "id": "bridge-1765834312941",
+        "type": "bridge",
+        "label": "Bridge",
+        "content": "I know that time heals pain\nI hope that someday\n",
+        "isCollapsed": false,
+        "chordProgressionId": "ae94b3c3-3780-4301-a0fc-896dbeeca09b",
+        "status": "draft"
+      },
+      {
+        "id": "bridge-1765834647125",
+        "type": "bridge",
+        "label": "Bridge 2",
+        "content": "I'm all alone\nTime moves slow",
+        "isCollapsed": false,
+        "chordProgressionId": "dc4ed07b-e967-4aad-ab30-9549ec61afdf",
+        "status": "draft"
+      },
+      {
+        "id": "chorus-1765834394042",
+        "type": "chorus",
+        "label": "Chorus 3",
+        "content": "I'm all alone, and I'm thinkin' maybe there's be a reason\nTime moves slow, yeah I'm leavin' cause no one believes\n\nI'm all alone, and I'm thinkin' maybe there's be a reason\nTime moves slow, yeah I'm leavin' cause no one believes in me",
+        "isCollapsed": false,
+        "chordProgressionId": "dc4ed07b-e967-4aad-ab30-9549ec61afdf",
+        "status": "draft"
+      }
+    ]
+  },
+  "scratchpad": "",
+  "metadata": {
+    "genre": "Pop/rock",
+    "mood": "Insightful",
+    "referenceText": "Think Ed Sheeran meets Blink-182"
+  },
+  "uiState": {},
+  "musicContext": {
+    "chordProgressions": [
+      {
+        "id": "ae94b3c3-3780-4301-a0fc-896dbeeca09b",
+        "name": "Verse",
+        "chords": [
+          "Bm",
+          "A",
+          "G",
+          "Em"
+        ]
+      },
+      {
+        "id": "dc4ed07b-e967-4aad-ab30-9549ec61afdf",
+        "name": "Chorus",
+        "chords": [
+          "Bm",
+          "G",
+          "Em",
+          "A"
+        ]
+      }
+    ],
+    "bpm": 130,
+    "key": "Bm"
+  }
+}
