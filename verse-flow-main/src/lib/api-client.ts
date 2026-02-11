@@ -21,7 +21,7 @@ type LyraStreamEvent =
   | { type: 'error'; error: string; hint?: string; status?: number };
 
 // Backend configuration
-const BACKEND_URL = 'http://localhost:3001';
+const BACKEND_URL = 'http://127.0.0.1:3001';
 
 /**
  * API Client for Verse Backend

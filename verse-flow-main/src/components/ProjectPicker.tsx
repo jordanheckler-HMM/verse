@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Music2, Plus, Trash2, FolderOpen, Clock } from 'lucide-react';
 import { ProjectListItem, SessionData } from '@/types/song';
@@ -18,22 +18,42 @@ export function ProjectPicker({ onProjectSelect, onCreateNew }: ProjectPickerPro
   const [creating, setCreating] = useState(false);
   const [newProjectTitle, setNewProjectTitle] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const retryTimeoutRef = useRef<number | null>(null);
+
+  const loadProjects = useCallback(async (attempt = 0) => {
+    try {
+      if (attempt === 0) {
+        setLoading(true);
+      }
+
+      const projectList = await apiClient.listProjects();
+      setProjects(projectList);
+      setLoading(false);
+    } catch (error) {
+      const maxAttempts = 20;
+
+      if (attempt < maxAttempts - 1) {
+        const delayMs = 500;
+        retryTimeoutRef.current = window.setTimeout(() => {
+          loadProjects(attempt + 1);
+        }, delayMs);
+        return;
+      }
+
+      console.error('[ProjectPicker] Failed to load projects:', error);
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadProjects();
-  }, []);
 
-  const loadProjects = async () => {
-    try {
-      setLoading(true);
-      const projectList = await apiClient.listProjects();
-      setProjects(projectList);
-    } catch (error) {
-      console.error('[ProjectPicker] Failed to load projects:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => {
+      if (retryTimeoutRef.current !== null) {
+        window.clearTimeout(retryTimeoutRef.current);
+      }
+    };
+  }, [loadProjects]);
 
   const handleCreateProject = async () => {
     if (!newProjectTitle.trim()) return;
@@ -54,15 +74,27 @@ export function ProjectPicker({ onProjectSelect, onCreateNew }: ProjectPickerPro
 
   const handleDeleteProject = async (projectId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    
-    if (!confirm('Are you sure you want to delete this project? This cannot be undone.')) {
-      return;
-    }
 
     try {
       setDeletingId(projectId);
-      await apiClient.deleteProject(projectId);
-      setProjects(projects.filter(p => p.id !== projectId));
+      const maxAttempts = 3;
+      let attempt = 0;
+
+      while (attempt < maxAttempts) {
+        try {
+          await apiClient.deleteProject(projectId);
+          break;
+        } catch (error) {
+          attempt += 1;
+          if (attempt >= maxAttempts) {
+            throw error;
+          }
+
+          await new Promise((resolve) => window.setTimeout(resolve, 300 * attempt));
+        }
+      }
+
+      setProjects((previousProjects) => previousProjects.filter((p) => p.id !== projectId));
     } catch (error) {
       console.error('[ProjectPicker] Failed to delete project:', error);
     } finally {
@@ -191,16 +223,24 @@ export function ProjectPicker({ onProjectSelect, onCreateNew }: ProjectPickerPro
             <div className="space-y-1.5 max-h-96 overflow-y-auto">
               <AnimatePresence mode="popLayout">
                 {projects.map((project) => (
-                  <motion.button
+                  <motion.div
                     key={project.id}
                     layout
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     onClick={() => onProjectSelect(project.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onProjectSelect(project.id);
+                      }
+                    }}
+                    role="button"
+                    tabIndex={0}
                     className={cn(
                       'w-full flex items-center justify-between p-3 rounded-md border border-border',
-                      'hover:bg-secondary/50 transition-colors text-left',
+                      'hover:bg-secondary/50 transition-colors text-left cursor-pointer',
                       'focus:outline-none focus:ring-1 focus:ring-accent/20',
                       deletingId === project.id && 'opacity-50 pointer-events-none'
                     )}
@@ -220,7 +260,7 @@ export function ProjectPicker({ onProjectSelect, onCreateNew }: ProjectPickerPro
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
-                  </motion.button>
+                  </motion.div>
                 ))}
               </AnimatePresence>
             </div>

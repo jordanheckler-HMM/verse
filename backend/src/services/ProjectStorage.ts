@@ -4,11 +4,13 @@
  */
 
 import { promises as fs } from 'fs';
+import os from 'os';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { Project, ProjectListItem, ProjectNotFoundError, SessionMetadata } from '../types';
 
-const PROJECTS_DIR = process.env.VERSE_PROJECTS_DIR || path.join(__dirname, '../../projects');
+const DEFAULT_PROJECTS_DIR = path.join(os.homedir(), '.verse', 'projects');
+const PROJECTS_DIR = process.env.VERSE_PROJECTS_DIR || DEFAULT_PROJECTS_DIR;
 
 /**
  * In-memory tracking of the currently active project

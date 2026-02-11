@@ -12,24 +12,57 @@ const Index = () => {
 
   // Check for active project on mount
   useEffect(() => {
+    let cancelled = false;
+
     const checkActiveProject = async () => {
       try {
-        const projectId = await apiClient.getActiveProjectId();
+        const maxAttempts = 8;
+        let projectId: string | null = null;
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          try {
+            projectId = await apiClient.getActiveProjectId();
+            break;
+          } catch (error) {
+            if (attempt === maxAttempts - 1) {
+              throw error;
+            }
+
+            await new Promise((resolve) => window.setTimeout(resolve, 300 * (attempt + 1)));
+          }
+        }
+
+        if (cancelled) {
+          return;
+        }
+
         if (projectId) {
           const project = await apiClient.loadProject(projectId);
+          if (cancelled) {
+            return;
+          }
           setActiveProject(project);
         } else {
           setShowProjectPicker(true);
         }
       } catch (error) {
+        if (cancelled) {
+          return;
+        }
         console.error('[Index] Failed to load active project:', error);
         setShowProjectPicker(true);
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
     checkActiveProject();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleProjectSelect = async (projectId: string) => {
